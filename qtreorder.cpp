@@ -103,8 +103,13 @@ void copyAtomToFile(FILE *in, FILE *out, uint32 moovSize) {
 // as well as rewriting the stco offset modifying code from above.
 
 int main(int argc, const char **argv) {
+	printf("\nQuickTime File Reorderer\n");
+	printf("Ensures the moov atom comes befor the mdat atom for easier streaming\n");
+	printf("Written by Matthew Hoops (clone2727)\n");
+	printf("See license.txt for the license\n\n");
+
 	if (argc < 3) {
-		printf("Usage: %s <filename> <output>\n", argv[0]);
+		printf("Usage: %s <input> <output>\n", argv[0]);
 		return 0;
 	}
 	

@@ -111,8 +111,13 @@ void copyData(FILE *in, FILE *out, uint32 length) {
 }
 
 int main(int argc, const char **argv) {
+	printf("\nQuickTime File Merger\n");
+	printf("Merges QuickTime files that store moov chunks in Mac resource forks\n");
+	printf("Written by Matthew Hoops (clone2727)\n");
+	printf("See license.txt for the license\n\n");
+
 	if (argc < 3) {
-		printf("Usage: %s <filename> <output>\n", argv[0]);
+		printf("Usage: %s <input> <output>\n", argv[0]);
 		return 0;
 	}
 
