@@ -1,4 +1,4 @@
-/* extract_cc4_pix.cpp -- Extract CC4 pictures from PIX files
+/* extract_cc4_pix.cpp -- Extract CC4/CC5 pictures from PIX files
  * Copyright (c) 2010 Matthew Hoops (clone2727)
  *
  * This program is free software; you can redistribute it and/or
@@ -251,8 +251,8 @@ bool extractAllFiles(FILE *input) {
 }
 
 int main(int argc, const char **argv) {
-	printf("\nCC4 PIX Image Extractor\n");
-	printf("Converts files from CC4 PIX files to BMP\n");
+	printf("\nCC4/CC5 PIX Image Extractor\n");
+	printf("Converts files from CC4/CC5 PIX files to BMP\n");
 	printf("Written by Matthew Hoops (clone2727)\n");
 	printf("See license.txt for the license\n\n");
 
