@@ -1,4 +1,4 @@
-/* tim2bmp.cpp -- Convert PlayStation TIM images to BMP's
+/* extract_cc4_pix.cpp -- Extract CC4 pictures from PIX files
  * Copyright (c) 2010 Matthew Hoops (clone2727)
  *
  * This program is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@
  *
  */
 
-// Thanks to http://www.romhacking.net/docs/timgfx.txt for the format information
+// Thanks to http://wiki.xentax.com/index.php/Close_Combat_4_PIX for the format information
 
 #include <cstdio>
 #include <cstring>
@@ -73,11 +73,6 @@ void writeUint16BE(FILE *file, uint16 x) {
 	writeByte(file, x & 0xff);
 }
 
-void writeUint32BE(FILE *file, uint32 x) {
-	writeUint16BE(file, x >> 16);
-	writeUint16BE(file, x & 0xffff);
-}
-
 uint32 getFileSize(FILE *file) {
 	uint32 pos = ftell(file);
 	fseek(file, 0, SEEK_END);
@@ -113,12 +108,6 @@ void writeBMPHeader(FILE *output, uint16 width, uint16 height, uint16 bitsPerPix
 	}
 }
 
-void writeBMPPalette(FILE *output, byte *palette) {
-	writeUint32LE(output, 256);
-	writeUint32LE(output, 256);
-	fwrite(palette, 1, 256 * 4, output);
-}
-
 void fillBMPHeaderValues(FILE *output, uint32 imageOffset, uint32 imageSize) {
 	fflush(output);
 	uint32 fileSize = getFileSize(output);
@@ -138,10 +127,18 @@ void fillBMPHeaderValues(FILE *output, uint32 imageOffset, uint32 imageSize) {
 	writeUint32LE(output, imageSize);
 }
 
+struct PicEntry {
+	char filename[32];
+	uint32 width;
+	uint32 height;
+	uint32 length;
+	uint32 offset;
+};
+
 // Functions to isolate the color channels and blow them up to 8-bit values
 
 inline byte isolateRedChannel(uint16 color) {
-	return (color & 0x1f) << 3;
+	return (color & 0x7c00) >> 7;
 }
 
 inline byte isolateGreenChannel(uint16 color) {
@@ -149,108 +146,34 @@ inline byte isolateGreenChannel(uint16 color) {
 }
 
 inline byte isolateBlueChannel(uint16 color) {
-	return (color & 0x7c00) >> 7;
+	return (color & 0x1f) << 3;
 }
 
-// 15-bit BGR
-byte *readTIMPalette(FILE *input, uint16 maxPaletteSize) {
-	byte *palette = new byte[256 * 4];
-	memset(palette, 0, 256 * 4);
 
-	/* uint32 clutSize = */ readUint32LE(input);
-	/* uint16 palOrigX = */ readUint16LE(input);
-	/* uint16 palOrigY = */ readUint16LE(input);
-	uint16 colorCount = readUint16LE(input);
-	uint16 clutCount = readUint16LE(input);
+// NOTE: Original format is rgb555
+bool extractImageToBMP(FILE *input, FILE *output, PicEntry &entry) {
+	fseek(input, entry.offset, SEEK_SET);
 
-	if (clutCount != 1) {
-		printf("Unsupported CLUT count %d\n", clutCount);
-		return 0;
-	}
+	printf("Width = %d\n", entry.width);
+	printf("Height = %d\n", entry.height);
 
-	if (colorCount > maxPaletteSize) {
-		printf("CLUT color count greater than possible %d > %d\n", colorCount, maxPaletteSize);
-		return 0;
-	}
-
-	for (uint16 i = 0; i < colorCount; i++) {
-		uint16 color = readUint16LE(input);
-		palette[i * 4] = isolateBlueChannel(color);
-		palette[i * 4 + 1] = isolateGreenChannel(color);
-		palette[i * 4 + 2] = isolateRedChannel(color);
-	}
-
-	return palette;
-}
-
-// 4bpp, paletted
-bool convertTIM4ToBMP(FILE *input, FILE *output) {
-	byte *palette = readTIMPalette(input, 16);
-
-	if (!palette)
+	if (entry.width * entry.height * 2 != entry.length) {
+		printf("Image entry has bad length %08x, %08x\n", entry.length, entry.offset);
 		return false;
-
-	/* uint32 fileSize = */ readUint32LE(input);
-	/* uint16 origX = */ readUint16LE(input);
-	/* uint16 origY = */ readUint16LE(input);
-	uint16 width = readUint16LE(input) * 4;
-	uint16 height = readUint16LE(input);
-
-	printf("Width = %d\n", width);
-	printf("Height = %d\n", height);
-
-	byte *pixels = new byte[width * height];
-
-	for (uint32 i = 0; i < width * height / 2; i++) {
-		byte val = readByte(input);
-		pixels[i * 2] = val >> 4;
-		pixels[i * 2 + 1] = val & 0xf;
 	}
 
-	writeBMPHeader(output, width, height, 8);
-	writeBMPPalette(output, palette);
-
-	const uint32 pitch = width;
-	const int extraDataLength = (pitch % 4) ? 4 - (pitch % 4) : 0;
-
-	for (int y = height - 1; y >= 0; y--) {
-		for (int x = 0; x < width; x++)
-			writeByte(output, pixels[x + width * y]);
-
-		for (int i = 0; i < extraDataLength; i++)
-			writeByte(output, 0);
-	}
-
-	fillBMPHeaderValues(output, 54 + 256 * 4, (pitch + extraDataLength) * height);
-
-	delete[] pixels;
-	delete[] palette;
-	return true;
-}
-
-// 15-bit BGR
-bool convertTIM16ToBMP(FILE *input, FILE *output) {
-	/* uint32 fileSize = */ readUint32LE(input);
-	/* uint16 origX = */ readUint16LE(input);
-	/* uint16 origY = */ readUint16LE(input);
-	uint16 width = readUint16LE(input);
-	uint16 height = readUint16LE(input);
-
-	printf("Width = %d\n", width);
-	printf("Height = %d\n", height);
-
-	uint16 *pixels = new uint16[width * height];
-	for (uint32 i = 0; i < width * height; i++)
+	uint16 *pixels = new uint16[entry.width * entry.height];
+	for (uint32 i = 0; i < entry.width * entry.height; i++)
 		pixels[i] = readUint16LE(input);
 
-	writeBMPHeader(output, width, height, 24);
+	writeBMPHeader(output, entry.width, entry.height, 24);
 
-	const uint32 pitch = width * 3;
+	const uint32 pitch = entry.width * 3;
 	const int extraDataLength = (pitch % 4) ? 4 - (pitch % 4) : 0;
 
-	for (int y = height - 1; y >= 0; y--) {
-		for (int x = 0; x < width; x++) {
-			uint16 color = pixels[x + width * y];
+	for (int y = entry.height - 1; y >= 0; y--) {
+		for (int x = 0; x < entry.width; x++) {
+			uint16 color = pixels[x + entry.width * y];
 			writeByte(output, isolateBlueChannel(color));
 			writeByte(output, isolateGreenChannel(color));
 			writeByte(output, isolateRedChannel(color));
@@ -260,54 +183,81 @@ bool convertTIM16ToBMP(FILE *input, FILE *output) {
 			writeByte(output, 0);
 	}
 
-	fillBMPHeaderValues(output, 54, (pitch + extraDataLength) * height);
+	fillBMPHeaderValues(output, 54, (pitch + extraDataLength) * entry.height);
 
 	delete[] pixels;
 	return true;
 }
 
-bool convertTIMToBMP(FILE *input, FILE *output) {
-	uint32 tag = readUint32LE(input);
+bool extractAllFiles(FILE *input) {
+	uint32 tag = readUint32BE(input);
 	uint32 version = readUint32LE(input);
 
-	if (tag != 0x10) {
-		printf("TIM tag not found\n");
+	if (tag != 'PICS') {
+		printf("PICS tag not found\n");
 		return false;
 	}
 
-	switch (version) {
-		case 8: // 4bpp (with CLUT)
-			printf("Found 4bpp (with CLUT) image\n");
-			return convertTIM4ToBMP(input, output);
-		case 0: // 4bpp (without CLUT)
-			printf("Unhandled 4bpp (without CLUT) image\n");
-			return false;
-		case 9: // 8bpp (with CLUT)
-			printf("Unhandled 8bpp (with CLUT) image\n");
-			return false;
-		case 1: // 8bpp (without CLUT)
-			printf("Unhandled 8bpp (without CLUT) image\n");
-			return false;
-		case 2: // 16bpp
-			printf("Found 16bpp TIM image\n");
-			return convertTIM16ToBMP(input, output);
-		case 3: // 24bpp
-			printf("Unhandled 24bpp\n");
-			return false;
+	if (version != 1) {
+		printf("Unknown version %d", version);
+		return false;
 	}
 
-	printf("Unknown TIM type %d\n", version);
-	return false;
+
+	uint32 fileCount = readUint32LE(input);
+	PicEntry *entries = new PicEntry[fileCount];
+
+	for (uint32 i = 0; i < fileCount; i++) {
+		fread(entries[i].filename, 1, 32, input);
+		entries[i].width = readUint32LE(input);
+		entries[i].height = readUint32LE(input);
+		entries[i].length = readUint32LE(input);
+		entries[i].offset = readUint32LE(input);
+	}
+
+	bool allDone = true;
+
+	for (uint32 i = 0; i < fileCount; i++) {
+		char *filename = new char[strlen(entries[i].filename) + 5];
+		memset(filename, 0, strlen(entries[i].filename) + 5);
+		strcpy(filename, entries[i].filename);
+		strcat(filename, ".bmp");
+
+		FILE *output = fopen(filename, "wb+");
+		if (!output) {
+			printf("Could not open '%s' for writing\n", filename);
+			allDone = false;
+			delete[] filename;
+			break;
+		}
+
+		printf("Extracting %s\n", filename);
+
+		if (!extractImageToBMP(input, output, entries[i])) {
+			allDone = false;
+			delete[] filename;
+			break;
+		}
+
+		printf("\n");
+
+		fflush(output);
+		fclose(output);
+		delete[] filename;
+	}
+
+	delete[] entries;
+	return allDone;
 }
 
 int main(int argc, const char **argv) {
-	printf("\nTIM to BMP Converter\n");
-	printf("Converts from PlayStation TIM files to BMP\n");
+	printf("\nCC4 PIX Image Extractor\n");
+	printf("Converts files from CC4 PIX files to BMP\n");
 	printf("Written by Matthew Hoops (clone2727)\n");
 	printf("See license.txt for the license\n\n");
 
-	if (argc < 3) {
-		printf("Usage: %s <input> <output>\n", argv[0]);
+	if (argc < 2) {
+		printf("Usage: %s <input>\n", argv[0]);
 		return 0;
 	}
 
@@ -317,20 +267,11 @@ int main(int argc, const char **argv) {
 		return 1;
 	}
 
-	FILE *output = fopen(argv[2], "wb+");
-	if (!output) {
-		fclose(input);
-		printf("Could not open '%s' for writing\n", argv[2]);
-		return 1;
-	}
-
-	if (!convertTIMToBMP(input, output))
+	if (!extractAllFiles(input))
 		return 1;
 
 	fclose(input);
-	fflush(output);
-	fclose(output);
 
-	printf("\nAll Done!\n");
+	printf("All Done!\n");
 	return 0;
 }
