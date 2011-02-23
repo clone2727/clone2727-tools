@@ -266,6 +266,43 @@ bool convertTIM16ToBMP(FILE *input, FILE *output) {
 	return true;
 }
 
+// 24-bit BGR
+bool convertTIM24ToBMP(FILE *input, FILE *output) {
+	/* uint32 fileSize = */ readUint32LE(input);
+	/* uint16 origX = */ readUint16LE(input);
+	/* uint16 origY = */ readUint16LE(input);
+	uint16 width = readUint16LE(input) * 2 / 3;
+	uint16 height = readUint16LE(input);
+
+	printf("Width = %d\n", width);
+	printf("Height = %d\n", height);
+
+	byte *pixels = new byte[width * height * 3];
+	for (uint32 i = 0; i < width * height * 3; i++)
+		pixels[i] = readByte(input);
+
+	writeBMPHeader(output, width, height, 24);
+
+	const uint32 pitch = width * 3;
+	const int extraDataLength = (pitch % 4) ? 4 - (pitch % 4) : 0;
+
+	for (int y = height - 1; y >= 0; y--) {
+		for (int x = 0; x < width; x++) {
+			writeByte(output, pixels[y * pitch + x * 3 + 2]);
+			writeByte(output, pixels[y * pitch + x * 3 + 1]);
+			writeByte(output, pixels[y * pitch + x * 3]);
+		}
+
+		for (int i = 0; i < extraDataLength; i++)
+			writeByte(output, 0);
+	}
+
+	fillBMPHeaderValues(output, 54, (pitch + extraDataLength) * height);
+
+	delete[] pixels;
+	return true;
+}
+
 bool convertTIMToBMP(FILE *input, FILE *output) {
 	uint32 tag = readUint32LE(input);
 	uint32 version = readUint32LE(input);
@@ -292,8 +329,8 @@ bool convertTIMToBMP(FILE *input, FILE *output) {
 			printf("Found 16bpp TIM image\n");
 			return convertTIM16ToBMP(input, output);
 		case 3: // 24bpp
-			printf("Unhandled 24bpp\n");
-			return false;
+			printf("Found 24bpp TIM image\n");
+			return convertTIM24ToBMP(input, output);
 	}
 
 	printf("Unknown TIM type %d\n", version);
