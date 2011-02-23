@@ -228,6 +228,48 @@ bool convertTIM4ToBMP(FILE *input, FILE *output) {
 	return true;
 }
 
+// 8bpp, paletted
+bool convertTIM8ToBMP(FILE *input, FILE *output) {
+	byte *palette = readTIMPalette(input, 256);
+
+	if (!palette)
+		return false;
+
+	/* uint32 fileSize = */ readUint32LE(input);
+	/* uint16 origX = */ readUint16LE(input);
+	/* uint16 origY = */ readUint16LE(input);
+	uint16 width = readUint16LE(input) * 2;
+	uint16 height = readUint16LE(input);
+
+	printf("Width = %d\n", width);
+	printf("Height = %d\n", height);
+
+	byte *pixels = new byte[width * height];
+
+	for (uint32 i = 0; i < width * height; i++)
+		pixels[i] = readByte(input);
+
+	writeBMPHeader(output, width, height, 8);
+	writeBMPPalette(output, palette);
+
+	const uint32 pitch = width;
+	const int extraDataLength = (pitch % 4) ? 4 - (pitch % 4) : 0;
+
+	for (int y = height - 1; y >= 0; y--) {
+		for (int x = 0; x < width; x++)
+			writeByte(output, pixels[x + width * y]);
+
+		for (int i = 0; i < extraDataLength; i++)
+			writeByte(output, 0);
+	}
+
+	fillBMPHeaderValues(output, 54 + 256 * 4, (pitch + extraDataLength) * height);
+
+	delete[] pixels;
+	delete[] palette;
+	return true;
+}
+
 // 15-bit BGR
 bool convertTIM16ToBMP(FILE *input, FILE *output) {
 	/* uint32 fileSize = */ readUint32LE(input);
@@ -314,14 +356,14 @@ bool convertTIMToBMP(FILE *input, FILE *output) {
 
 	switch (version) {
 		case 8: // 4bpp (with CLUT)
-			printf("Found 4bpp (with CLUT) image\n");
+			printf("Found 4bpp (with CLUT) TIM image\n");
 			return convertTIM4ToBMP(input, output);
 		case 0: // 4bpp (without CLUT)
 			printf("Unhandled 4bpp (without CLUT) image\n");
 			return false;
 		case 9: // 8bpp (with CLUT)
-			printf("Unhandled 8bpp (with CLUT) image\n");
-			return false;
+			printf("Found 8bpp (with CLUT) TIM image\n");
+			return convertTIM8ToBMP(input, output);
 		case 1: // 8bpp (without CLUT)
 			printf("Unhandled 8bpp (without CLUT) image\n");
 			return false;
