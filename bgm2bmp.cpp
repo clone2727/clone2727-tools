@@ -1,5 +1,5 @@
 /* bgm2cmp.cpp -- Convert CC4/CC5 BGM/OVM images to BMP
- * Copyright (c) 2010 Matthew Hoops (clone2727)
+ * Copyright (c) 2010-2011 Matthew Hoops (clone2727)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
